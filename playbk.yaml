@@ -1,0 +1,48 @@
+  - name: Make sure 'bizongo' group is already created.
+  group:
+      name: bizongo
+      state: present
+
+- name: Allow 'Bizongo' group to have passwordless sudo
+  lineinfile:
+      dest: /etc/sudoers
+      state: present
+      regexp: '^%bizongo'
+    line: '%bizongo ALL=(ALL) NOPASSWD: ALL'
+    validate: 'visudo -cf %s'
+    
+  - name: Add test1 user and add it to sudo
+    user: name=test1
+          state=present
+          createhome=yes
+    become: yes
+    become_method: "sudo"
+
+- name: Add sudoer user to bizongo group
+    user: name=test1 groups=bizongo append=yes state=present createhome=yes
+
+- name: Set up authorized keys for the test1 user
+    authorized_key: user=test1 key="{{item}}"
+  with_file:
+      - /home/userhome/.ssh/id_rsa.pub
+      
+- name: Disallow password authentication
+  lineinfile: dest=/etc/ssh/sshd_config
+    regexp="^PasswordAuthentication"
+    line="PasswordAuthentication no"
+    state=present
+  notify: Restart ssh
+      
+ - name: Setup alternate SSH port
+  lineinfile:
+    dest: "/etc/ssh/sshd_config"
+    regexp: "^Port"
+    line: "Port 10022"
+  notify: "Restart sshd"
+
+- name: Setup selinux for alternate SSH port
+  seport:
+    ports: "10022"
+    proto: "tcp"
+    setype: "ssh_port_t"
+    state: "present"
